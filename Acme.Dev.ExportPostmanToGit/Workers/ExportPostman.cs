@@ -26,7 +26,7 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
         private readonly PostmanConfiguration postmanConfiguration;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ExportPostman"/> class.
+        /// Initializes a new instance of the <see cref="ExportPostman" /> class.
         /// </summary>
         /// <param name="logger">The logger.</param>
         /// <param name="postmanConfiguration">The postman configuration.</param>
@@ -48,12 +48,78 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
             var workspaces = this.Get<PostmanWorkspaces>("/workspaces");
             this.SynchronizeWorkspaces(workspaces);
 
-            var collections = this.Get<PostmanCollections>("/collections");
+            foreach (var workspace in workspaces.Workspaces)
+            {
+                this.SynchronizeWorkspace(workspace);
+            }
         }
 
         private void EnsureDestination()
         {
             Directory.CreateDirectory(this.postmanConfiguration.LocalDirectory);
+        }
+
+        private T Get<T>(string path)
+        {
+            var url = $"{BaseUrl}{path}";
+
+            var request = WebRequest.CreateHttp(url);
+            request.Headers.Add("X-Api-Key", this.postmanConfiguration.ApiKey);
+            using var response = request.GetResponse();
+            using var responseStream = response.GetResponseStream();
+            using var streamReader = new StreamReader(responseStream ?? throw new InvalidOperationException("The response stream cannot be null"));
+            var json = streamReader.ReadToEnd();
+
+            return JsonSerializer.Deserialize<T>(json);
+        }
+
+        private string GetRaw(string path)
+        {
+            var url = $"{BaseUrl}{path}";
+
+            var request = WebRequest.CreateHttp(url);
+            request.Headers.Add("X-Api-Key", this.postmanConfiguration.ApiKey);
+            using var response = request.GetResponse();
+            using var responseStream = response.GetResponseStream();
+            using var streamReader = new StreamReader(responseStream ?? throw new InvalidOperationException("The response stream cannot be null"));
+            return streamReader.ReadToEnd();
+        }
+
+        private void SynchronizeWorkspace(PostmanWorkspaceInformation workspace)
+        {
+            var workspaceDetails = this.Get<PostmanWorkspace>("/workspaces/" + workspace.Id);
+
+            var workspaceDirectory = Path.Combine(this.postmanConfiguration.LocalDirectory, workspace.Name);
+
+            if (workspaceDetails.Workspace?.Collections != null)
+            {
+                foreach (var collection in workspaceDetails.Workspace.Collections)
+                {
+                    var collectionExport = this.GetRaw("/collections/" + collection.Uid);
+                    var collectionPath = Path.Combine(workspaceDirectory, $"collection.{collection.Name}.json");
+                    File.WriteAllText(collectionPath, collectionExport);
+                    this.logger.LogInformation($"Collection {collection.Name} in workspace {workspace.Name} has been exported.");
+                }
+            }
+            else
+            {
+                this.logger.LogDebug($"Skipped collections in workspace {workspace.Name}.");
+            }
+
+            if (workspaceDetails.Workspace?.Environments != null)
+            {
+                foreach (var environement in workspaceDetails.Workspace.Environments)
+                {
+                    var environementExport = this.GetRaw("/environments/" + environement.Uid);
+                    var environmentPath = Path.Combine(workspaceDirectory, $"environment.{environement.Name}.json");
+                    File.WriteAllText(environmentPath, environementExport);
+                    this.logger.LogInformation($"Environement {environement.Name} in workspace {workspace.Name} has been exported.");
+                }
+            }
+            else
+            {
+                this.logger.LogDebug($"Skipped environments in workspace {workspace.Name}.");
+            }
         }
 
         private void SynchronizeWorkspaces(PostmanWorkspaces workspaces)
@@ -77,20 +143,6 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
                     directory.Delete();
                 }
             }
-        }
-
-        private T Get<T>(string path)
-        {
-            var url = $"{BaseUrl}{path}";
-
-            var request = WebRequest.CreateHttp(url);
-            request.Headers.Add("X-Api-Key", this.postmanConfiguration.ApiKey);
-            using var response = request.GetResponse();
-            using var responseStream = response.GetResponseStream();
-            using var streamReader = new StreamReader(responseStream ?? throw new InvalidOperationException("The response stream cannot be null"));
-            var json = streamReader.ReadToEnd();
-
-            return JsonSerializer.Deserialize<T>(json);
         }
     }
 }
