@@ -19,6 +19,12 @@ namespace Acme.Dev.ExportPostmanToGit.Application
         public string ApiKey { get; set; }
 
         /// <summary>
+        /// Gets or sets a value indicating whether git command must be called.
+        /// </summary>
+        /// <value>The EnableGit.</value>
+        public bool EnableGit { get; set; }
+
+        /// <summary>
         /// Gets or sets the LocalDirectory.
         /// </summary>
         /// <value>The LocalDirectory.</value>

@@ -5,6 +5,7 @@
 namespace Acme.Dev.ExportPostmanToGit.Workers
 {
     using System;
+    using System.Diagnostics;
     using System.IO;
     using System.Linq;
     using System.Net;
@@ -44,19 +45,49 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
             this.logger.LogInformation("Starting the postman export");
 
             this.EnsureDestination();
-
-            var workspaces = this.Get<PostmanWorkspaces>("/workspaces");
-            this.SynchronizeWorkspaces(workspaces);
-
-            foreach (var workspace in workspaces.Workspaces)
-            {
-                this.SynchronizeWorkspace(workspace);
-            }
+            this.Synchronize();
+            this.Git();
         }
 
         private void EnsureDestination()
         {
             Directory.CreateDirectory(this.postmanConfiguration.LocalDirectory);
+        }
+
+        private void Execute(string cmd, string arguments)
+        {
+            this.logger.LogInformation($"Executing {cmd} {arguments}");
+
+            var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = cmd,
+                    Arguments = arguments,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = this.postmanConfiguration.LocalDirectory,
+                },
+            };
+            process.Start();
+            process.WaitForExit();
+            var result = process.StandardOutput.ReadToEnd();
+            var error = process.StandardError.ReadToEnd();
+            this.logger.LogDebug(result);
+
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                if (process.ExitCode != 0)
+                {
+                    this.logger.LogError(error);
+                }
+                else
+                {
+                    this.logger.LogDebug(error);
+                }
+            }
         }
 
         private T Get<T>(string path)
@@ -83,6 +114,27 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
             using var responseStream = response.GetResponseStream();
             using var streamReader = new StreamReader(responseStream ?? throw new InvalidOperationException("The response stream cannot be null"));
             return streamReader.ReadToEnd();
+        }
+
+        private void Git()
+        {
+            if (this.postmanConfiguration.EnableGit)
+            {
+                this.Execute("git", "add .");
+                this.Execute("git", $"commit -m \"Export collection from {typeof(ExportPostman).FullName}\"");
+                this.Execute("git", "push");
+            }
+        }
+
+        private void Synchronize()
+        {
+            var workspaces = this.Get<PostmanWorkspaces>("/workspaces");
+            this.SynchronizeWorkspaces(workspaces);
+
+            foreach (var workspace in workspaces.Workspaces)
+            {
+                this.SynchronizeWorkspace(workspace);
+            }
         }
 
         private void SynchronizeWorkspace(PostmanWorkspaceInformation workspace)
@@ -137,6 +189,11 @@ namespace Acme.Dev.ExportPostmanToGit.Workers
 
             foreach (var directory in directories)
             {
+                if (directory.Name.StartsWith("."))
+                {
+                    continue;
+                }
+
                 if (workspaces.Workspaces.All(w => w.Name != directory.Name))
                 {
                     this.logger.LogInformation($"Deleting directory for workspace {directory.Name}");
