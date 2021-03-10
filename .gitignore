@@ -337,3 +337,6 @@ ASALocalRun/
 ## next
 .next
 dist
+
+# development settings
+Acme.Dev.ExportPostmanToGit/appsettings.*.json

@@ -1,8 +1,6 @@
-﻿// -----------------------------------------------------------------------
-//  <copyright file="Program.cs" company="CPH">
-//  Copyright (c) CPH. All rights reserved.
-//  </copyright>
-// -----------------------------------------------------------------------
+﻿// <copyright file="Program.cs" company="Acme">
+// Copyright (c) Acme. All rights reserved.
+// </copyright>
 
 namespace Acme.Dev.ExportPostmanToGit
 {
@@ -10,6 +8,9 @@ namespace Acme.Dev.ExportPostmanToGit
     using System.IO;
     using System.Linq;
     using System.Threading.Tasks;
+
+    using Acme.Dev.ExportPostmanToGit.Application;
+    using Acme.Dev.ExportPostmanToGit.Workers;
 
     using Microsoft.Extensions.Configuration;
     using Microsoft.Extensions.DependencyInjection;
@@ -30,12 +31,12 @@ namespace Acme.Dev.ExportPostmanToGit
             var hostBuilder = new HostBuilder()
                 .ConfigureAppConfiguration((hostContext, configBuilder) =>
                 {
+                    configBuilder.AddEnvironmentVariables();
                     configBuilder.SetBasePath(Directory.GetCurrentDirectory());
-                    configBuilder.AddJsonFile("appsettings.json", optional: true);
+                    configBuilder.AddJsonFile("appsettings.json", true);
                     configBuilder.AddJsonFile(
                         $"appsettings.{hostContext.HostingEnvironment.EnvironmentName}.json",
-                        optional: true);
-                    configBuilder.AddEnvironmentVariables();
+                        true);
                 })
                 .ConfigureLogging((hostContext, configLogging) =>
                 {
@@ -44,6 +45,10 @@ namespace Acme.Dev.ExportPostmanToGit
                 })
                 .ConfigureServices((hostContext, services) =>
                 {
+                    services.AddSingleton(_ => hostContext.Configuration.GetSection("Schedule").Get<ScheduleConfiguration>());
+                    services.AddSingleton(_ => hostContext.Configuration.GetSection("Postman").Get<PostmanConfiguration>());
+
+                    services.AddScoped<ExportPostman>();
                     services.AddScoped<IHostedService, ExportPostmanAccountService>();
                 });
 
