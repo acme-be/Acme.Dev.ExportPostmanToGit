@@ -49,7 +49,7 @@ namespace Acme.Dev.ExportPostmanToGit
         {
             this.logger.LogInformation($"{nameof(ExportPostmanAccountService)} is starting");
 
-            this.timer = new Timer(this.DoWork, null, TimeSpan.Zero, TimeSpan.FromSeconds(this.scheduleConfiguration.Interval));
+            this.timer = new Timer(this.DoWork, null, TimeSpan.Zero, TimeSpan.FromMinutes(this.scheduleConfiguration.Interval));
 
             return Task.CompletedTask;
         }
